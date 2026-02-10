@@ -15,21 +15,27 @@ class ConversationDetailScreen extends StatefulWidget {
       _ConversationDetailScreenState();
 }
 
-class _ConversationDetailScreenState
-    extends State<ConversationDetailScreen> {
+class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final repo = ConversationRepository.instance;
 
   late String conversationId;
 
+  final TextEditingController _addressController = TextEditingController();
+  bool _addressControllerInitialized = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    conversationId =
-        ModalRoute.of(context)!.settings.arguments as String;
+    conversationId = ModalRoute.of(context)!.settings.arguments as String;
   }
 
-  Conversation get _conversation =>
-      repo.getConversationById(conversationId);
+  @override
+  void dispose() {
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  Conversation get _conversation => repo.getConversationById(conversationId);
 
   AutoReadSession? get _activeSession {
     return repo
@@ -62,17 +68,35 @@ class _ConversationDetailScreenState
     setState(() {});
   }
 
+  // Step 1: tagging
+  void _setTagged(bool value) {
+    repo.setTagged(conversationId, value);
+    setState(() {
+      _addressControllerInitialized = false; // re-sync controller
+    });
+  }
+
+  void _setExternalAddress(String value) {
+    repo.setExternalAddress(conversationId, value);
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final convo = _conversation;
     final activeSession = _activeSession;
 
-    final String expirationText =
-        activeSession == null
-            ? ''
-            : activeSession.expiresAt == null
-                ? 'Enabled (no expiration)'
-                : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
+    // Keep the text controller synced to repo state.
+    if (!_addressControllerInitialized) {
+      _addressController.text = convo.externalAddress ?? '';
+      _addressControllerInitialized = true;
+    }
+
+    final String expirationText = activeSession == null
+        ? ''
+        : activeSession.expiresAt == null
+            ? 'Enabled (no expiration)'
+            : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
 
     return Scaffold(
       appBar: AppBar(),
@@ -91,11 +115,49 @@ class _ConversationDetailScreenState
               ),
               subtitle: Text(convo.lastMessagePreview),
               leading: CircleAvatar(
-                child: Text(convo.name[0]),
+                child: Text(convo.name.isNotEmpty ? convo.name[0] : '?'),
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // Step 1: Tagging section
+            const Text(
+              'Tagging',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            SwitchListTile(
+              title: const Text('Tagged for Auto-Read'),
+              subtitle: const Text(
+                'Only tagged conversations will be eligible for import and real-time read aloud.',
+              ),
+              value: convo.isTagged,
+              onChanged: (value) => _setTagged(value),
+            ),
+
+            const SizedBox(height: 8),
+
+            TextField(
+              controller: _addressController,
+              enabled: convo.isTagged,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Phone number',
+                hintText: '+15551234567',
+                helperText: convo.isTagged
+                    ? 'Used to match imported and real-time messages.'
+                    : 'Enable tagging to set a phone number.',
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (value) => _setExternalAddress(value),
+            ),
+
+            const Divider(height: 32),
 
             const Text(
               'Assigned Voice',
@@ -145,17 +207,14 @@ class _ConversationDetailScreenState
             ] else ...[
               ElevatedButton.icon(
                 icon: const Icon(Icons.hearing),
-                label:
-                    const Text('Enable Auto-Read (No Expiration)'),
+                label: const Text('Enable Auto-Read (No Expiration)'),
                 onPressed: _enableAutoReadIndefinite,
               ),
               const SizedBox(height: 12),
               ElevatedButton.icon(
                 icon: const Icon(Icons.timer),
-                label:
-                    const Text('Enable Auto-Read for 30 Minutes'),
-                onPressed: () =>
-                    _enableAutoReadForMinutes(30),
+                label: const Text('Enable Auto-Read for 30 Minutes'),
+                onPressed: () => _enableAutoReadForMinutes(30),
               ),
             ],
           ],

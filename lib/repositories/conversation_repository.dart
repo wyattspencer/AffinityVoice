@@ -48,8 +48,7 @@ class ConversationRepository {
   // Conversation Access
   // ------------------------------------------------------------
 
-  List<Conversation> get conversations =>
-      List.unmodifiable(_conversations);
+  List<Conversation> get conversations => List.unmodifiable(_conversations);
 
   Conversation getConversationById(String id) {
     return _conversations.firstWhere(
@@ -64,6 +63,59 @@ class ConversationRepository {
 
   void _replaceConversation(int index, Conversation updated) {
     _conversations[index] = updated;
+  }
+
+  // ------------------------------------------------------------
+  // Tagging (Step 1)
+  // ------------------------------------------------------------
+
+  void setTagged(String conversationId, bool isTagged) {
+    final index = _indexOfConversation(conversationId);
+    if (index == -1) return;
+
+    final current = _conversations[index];
+
+    // If untagging, clear externalAddress as well (MVP rule).
+    final updated = isTagged
+        ? current.copyWith(isTagged: true)
+        : current.copyWith(isTagged: false, clearExternalAddress: true);
+
+    _replaceConversation(index, updated);
+  }
+
+  void setExternalAddress(String conversationId, String? externalAddress) {
+    final index = _indexOfConversation(conversationId);
+    if (index == -1) return;
+
+    final current = _conversations[index];
+
+    // Only allow setting address when tagged (keeps rules tight).
+    if (!current.isTagged) return;
+
+    final normalized = _normalizeExternalAddress(externalAddress);
+
+    final updated = current.copyWith(
+      externalAddress: normalized,
+    );
+
+    _replaceConversation(index, updated);
+  }
+
+  String? _normalizeExternalAddress(String? input) {
+    if (input == null) return null;
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return null;
+
+    // MVP normalization: keep digits and leading '+'. No heavy parsing yet.
+    final buffer = StringBuffer();
+    for (var i = 0; i < trimmed.length; i++) {
+      final ch = trimmed[i];
+      if ((ch.codeUnitAt(0) >= 48 && ch.codeUnitAt(0) <= 57) || ch == '+') {
+        buffer.write(ch);
+      }
+    }
+    final out = buffer.toString();
+    return out.isEmpty ? null : out;
   }
 
   // ------------------------------------------------------------
@@ -154,9 +206,7 @@ class ConversationRepository {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     _autoReadSessions.removeWhere(
-      (_, session) =>
-          session.expiresAt != null &&
-          session.expiresAt! < now,
+      (_, session) => session.expiresAt != null && session.expiresAt! < now,
     );
 
     return _autoReadSessions.values.toList();

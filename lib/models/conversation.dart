@@ -20,6 +20,14 @@ class Conversation {
   /// null = no expiration
   final int? autoReadExpiresAt;
 
+  /// Tagged for message import / notification matching (MVP feature).
+  /// Only tagged conversations should receive imported or real-time messages.
+  final bool isTagged;
+
+  /// Identifier used to match imported / notification messages to this conversation.
+  /// For now: phone number or address string. Prefer E.164 but accept raw digits.
+  final String? externalAddress;
+
   const Conversation({
     required this.id,
     required this.name,
@@ -27,12 +35,17 @@ class Conversation {
     this.assignedVoiceId = 'default',
     this.autoReadEnabled = false,
     this.autoReadExpiresAt,
+    this.isTagged = false,
+    this.externalAddress,
   });
 
   Conversation copyWith({
     String? assignedVoiceId,
     bool? autoReadEnabled,
     int? autoReadExpiresAt,
+    bool? isTagged,
+    String? externalAddress,
+    bool clearExternalAddress = false,
   }) {
     return Conversation(
       id: id,
@@ -41,6 +54,10 @@ class Conversation {
       assignedVoiceId: assignedVoiceId ?? this.assignedVoiceId,
       autoReadEnabled: autoReadEnabled ?? this.autoReadEnabled,
       autoReadExpiresAt: autoReadExpiresAt,
+      isTagged: isTagged ?? this.isTagged,
+      externalAddress: clearExternalAddress
+          ? null
+          : (externalAddress ?? this.externalAddress),
     );
   }
 }

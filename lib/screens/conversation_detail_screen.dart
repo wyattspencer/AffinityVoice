@@ -82,32 +82,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     setState(() {});
   }
 
-  void _addSampleMessage() {
-    final convo = _conversation;
-
-    // Only allow if tagged (product rule) and address is set.
-    if (!convo.isTagged) return;
-    final addr = convo.externalAddress;
-    if (addr == null || addr.isEmpty) return;
-
-    final ts = DateTime.now();
-    final id = '${addr}_${ts.millisecondsSinceEpoch}_sample';
-
-    repo.addMessage(
-      Message(
-        id: id,
-        conversationId: conversationId,
-        externalAddress: addr,
-        timestamp: ts,
-        body: 'Sample message at ${ts.toLocal()}',
-        direction: MessageDirection.incoming,
-        source: MessageSource.manual,
-      ),
-    );
-
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     final convo = _conversation;
@@ -126,9 +100,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
 
     final List<Message> messages = repo.getMessages(conversationId);
-
-    final bool canAddSample =
-        convo.isTagged && (convo.externalAddress ?? '').isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(),
@@ -198,14 +169,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-
-            ElevatedButton.icon(
-              onPressed: canAddSample ? _addSampleMessage : null,
-              icon: const Icon(Icons.add_comment),
-              label: const Text('Add Sample Message'),
-            ),
-
             const SizedBox(height: 8),
 
             if (messages.isEmpty)

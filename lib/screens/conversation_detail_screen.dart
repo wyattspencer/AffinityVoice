@@ -2,10 +2,11 @@
 
 import 'package:flutter/material.dart';
 
-import '../repositories/conversation_repository.dart';
-import '../models/conversation.dart';
-import '../models/auto_read_session.dart';
 import '../models/assigned_voice.dart';
+import '../models/auto_read_session.dart';
+import '../models/conversation.dart';
+import '../models/message.dart';
+import '../repositories/conversation_repository.dart';
 
 class ConversationDetailScreen extends StatefulWidget {
   const ConversationDetailScreen({super.key});
@@ -68,7 +69,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     setState(() {});
   }
 
-  // Step 1: tagging
+  // Tagging (Step 1)
   void _setTagged(bool value) {
     repo.setTagged(conversationId, value);
     setState(() {
@@ -98,6 +99,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             ? 'Enabled (no expiration)'
             : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
 
+    final List<Message> messages = repo.getMessages(conversationId);
+
     return Scaffold(
       appBar: AppBar(),
       body: Padding(
@@ -121,7 +124,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
             const SizedBox(height: 16),
 
-            // Step 1: Tagging section
+            // Tagging section
             const Text(
               'Tagging',
               style: TextStyle(
@@ -156,6 +159,54 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
               ),
               onChanged: (value) => _setExternalAddress(value),
             ),
+
+            const Divider(height: 32),
+
+            const Text(
+              'Message History',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            if (messages.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No messages yet. (Import and real-time capture come next.)',
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: messages.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final m = messages[index];
+
+                  final directionLabel =
+                      m.direction == MessageDirection.incoming
+                          ? 'Incoming'
+                          : 'Outgoing';
+
+                  final timeLabel = m.timestamp.toLocal().toString();
+
+                  return ListTile(
+                    title: Text(m.body),
+                    subtitle: Text('$directionLabel • $timeLabel'),
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Playback will be added in the next step.'),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
 
             const Divider(height: 32),
 

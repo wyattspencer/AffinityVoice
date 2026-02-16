@@ -1,5 +1,6 @@
 // lib/repositories/conversation_repository.dart
 
+import '../models/app_settings.dart';
 import '../models/auto_read_session.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
@@ -56,6 +57,9 @@ class ConversationRepository {
   /// Dedupe index: message IDs we've already stored per conversation.
   final Map<String, Set<String>> _messageIdsByConversationId = {};
 
+  /// Global app settings (in-memory for now).
+  AppSettings _appSettings = const AppSettings();
+
   // ------------------------------------------------------------
   // Conversation Access
   // ------------------------------------------------------------
@@ -75,6 +79,16 @@ class ConversationRepository {
 
   void _replaceConversation(int index, Conversation updated) {
     _conversations[index] = updated;
+  }
+
+  // ------------------------------------------------------------
+  // App Settings (Global TTS controls)
+  // ------------------------------------------------------------
+
+  AppSettings get appSettings => _appSettings;
+
+  void updateAppSettings(AppSettings settings) {
+    _appSettings = settings;
   }
 
   // ------------------------------------------------------------
@@ -131,14 +145,13 @@ class ConversationRepository {
   }
 
   // ------------------------------------------------------------
-  // Messages (Step 2.2)
+  // Messages
   // ------------------------------------------------------------
 
   /// Returns messages for a conversation (newest last).
   /// Always returns an unmodifiable list.
   List<Message> getMessages(String conversationId) {
     final list = _messagesByConversationId[conversationId] ?? const <Message>[];
-    // Ensure stable sort (older -> newer).
     final sorted = List<Message>.from(list)
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     return List.unmodifiable(sorted);

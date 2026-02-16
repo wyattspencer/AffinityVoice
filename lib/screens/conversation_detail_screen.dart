@@ -7,6 +7,7 @@ import '../models/auto_read_session.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
 import '../repositories/conversation_repository.dart';
+import '../services/service_locator.dart';
 
 class ConversationDetailScreen extends StatefulWidget {
   const ConversationDetailScreen({super.key});
@@ -49,6 +50,21 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         );
   }
 
+  Future<void> _playMessage(Message message) async {
+    final convo = _conversation;
+
+    await ServiceLocator.ttsService.speak(
+      text: message.body,
+      voicePresetId: convo.assignedVoiceId,
+      rate: 0.5,
+      pitch: 1.0,
+    );
+  }
+
+  Future<void> _stopPlayback() async {
+    await ServiceLocator.ttsService.stop();
+  }
+
   void _setVoice(String voiceId) {
     repo.assignVoice(conversationId, voiceId);
     setState(() {});
@@ -69,11 +85,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     setState(() {});
   }
 
-  // Tagging (Step 1)
   void _setTagged(bool value) {
     repo.setTagged(conversationId, value);
     setState(() {
-      _addressControllerInitialized = false; // re-sync controller
+      _addressControllerInitialized = false;
     });
   }
 
@@ -86,8 +101,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   Widget build(BuildContext context) {
     final convo = _conversation;
     final activeSession = _activeSession;
+    final messages = repo.getMessages(conversationId);
 
-    // Keep the text controller synced to repo state.
     if (!_addressControllerInitialized) {
       _addressController.text = convo.externalAddress ?? '';
       _addressControllerInitialized = true;
@@ -99,15 +114,19 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             ? 'Enabled (no expiration)'
             : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
 
-    final List<Message> messages = repo.getMessages(conversationId);
-
     return Scaffold(
-      appBar: AppBar(),
+      appBar: AppBar(
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.stop),
+            onPressed: _stopPlayback,
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            // Conversation header
             ListTile(
               title: Text(
                 convo.name,
@@ -117,67 +136,19 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                 ),
               ),
               subtitle: Text(convo.lastMessagePreview),
-              leading: CircleAvatar(
-                child: Text(convo.name.isNotEmpty ? convo.name[0] : '?'),
-              ),
             ),
 
             const SizedBox(height: 16),
 
-            // Tagging section
-            const Text(
-              'Tagging',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            SwitchListTile(
-              title: const Text('Tagged for Auto-Read'),
-              subtitle: const Text(
-                'Only tagged conversations will be eligible for import and real-time read aloud.',
-              ),
-              value: convo.isTagged,
-              onChanged: (value) => _setTagged(value),
-            ),
-
-            const SizedBox(height: 8),
-
-            TextField(
-              controller: _addressController,
-              enabled: convo.isTagged,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Phone number',
-                hintText: '+15551234567',
-                helperText: convo.isTagged
-                    ? 'Used to match imported and real-time messages.'
-                    : 'Enable tagging to set a phone number.',
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: (value) => _setExternalAddress(value),
-            ),
-
-            const Divider(height: 32),
-
             const Text(
               'Message History',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+
             const SizedBox(height: 8),
 
             if (messages.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  'No messages yet. (Import and real-time capture come next.)',
-                ),
-              )
+              const Text('No messages yet.')
             else
               ListView.separated(
                 shrinkWrap: true,
@@ -186,24 +157,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final m = messages[index];
-
-                  final directionLabel =
-                      m.direction == MessageDirection.incoming
-                          ? 'Incoming'
-                          : 'Outgoing';
-
-                  final timeLabel = m.timestamp.toLocal().toString();
-
                   return ListTile(
                     title: Text(m.body),
-                    subtitle: Text('$directionLabel • $timeLabel'),
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Playback will be added in the next step.'),
-                        ),
-                      );
-                    },
+                    subtitle: Text(
+                        '${m.direction.name} • ${m.timestamp.toLocal()}'),
+                    onTap: () => _playMessage(m),
                   );
                 },
               ),
@@ -212,18 +170,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
             const Text(
               'Assigned Voice',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
 
-            // Voice picker
             for (final v in VoicePresets.all)
               RadioListTile<String>(
                 title: Text(v.displayName),
-                subtitle: Text(v.description),
                 value: v.id,
                 groupValue: convo.assignedVoiceId,
                 onChanged: (value) {
@@ -235,37 +187,22 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
             const Text(
               'Auto-Read Settings',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
 
             if (activeSession != null) ...[
               ListTile(
                 title: const Text('Auto-Read Status'),
                 subtitle: Text(expirationText),
-                trailing: const Icon(
-                  Icons.hearing,
-                  color: Colors.green,
-                ),
               ),
               TextButton(
                 onPressed: _disableAutoRead,
                 child: const Text('Disable Auto-Read'),
               ),
             ] else ...[
-              ElevatedButton.icon(
-                icon: const Icon(Icons.hearing),
-                label: const Text('Enable Auto-Read (No Expiration)'),
+              ElevatedButton(
                 onPressed: _enableAutoReadIndefinite,
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.timer),
-                label: const Text('Enable Auto-Read for 30 Minutes'),
-                onPressed: () => _enableAutoReadForMinutes(30),
+                child: const Text('Enable Auto-Read'),
               ),
             ],
           ],

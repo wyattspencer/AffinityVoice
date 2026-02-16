@@ -2,11 +2,11 @@
 
 import 'package:flutter/material.dart';
 
-import '../models/assigned_voice.dart';
 import '../models/auto_read_session.dart';
 import '../models/conversation.dart';
 import '../models/message.dart';
 import '../repositories/conversation_repository.dart';
+import '../services/import_service.dart';
 import '../services/service_locator.dart';
 
 class ConversationDetailScreen extends StatefulWidget {
@@ -19,22 +19,14 @@ class ConversationDetailScreen extends StatefulWidget {
 
 class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final repo = ConversationRepository.instance;
+  final importService = ImportService();
 
   late String conversationId;
-
-  final TextEditingController _addressController = TextEditingController();
-  bool _addressControllerInitialized = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     conversationId = ModalRoute.of(context)!.settings.arguments as String;
-  }
-
-  @override
-  void dispose() {
-    _addressController.dispose();
-    super.dispose();
   }
 
   Conversation get _conversation => repo.getConversationById(conversationId);
@@ -65,54 +57,39 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     await ServiceLocator.ttsService.stop();
   }
 
-  void _setVoice(String voiceId) {
-    repo.assignVoice(conversationId, voiceId);
-    setState(() {});
-  }
+  void _simulateImport() {
+    final convo = _conversation;
 
-  void _enableAutoReadIndefinite() {
-    repo.enableAutoReadIndefinitely(conversationId);
-    setState(() {});
-  }
+    if (!convo.isTagged ||
+        convo.externalAddress == null ||
+        convo.externalAddress!.isEmpty) {
+      return;
+    }
 
-  void _enableAutoReadForMinutes(int minutes) {
-    repo.enableAutoReadForDuration(conversationId, minutes);
-    setState(() {});
-  }
+    const sampleXml = '''
+<smses count="1">
+  <sms protocol="0"
+       address="+15551234567"
+       date="1708000000000"
+       type="1"
+       body="Imported sample message"/>
+</smses>
+''';
 
-  void _disableAutoRead() {
-    repo.disableAutoRead(conversationId);
-    setState(() {});
-  }
+    final parsed = importService.parseSmsBackupXml(
+      xmlContent: sampleXml,
+      conversationId: conversationId,
+      externalAddress: convo.externalAddress!,
+    );
 
-  void _setTagged(bool value) {
-    repo.setTagged(conversationId, value);
-    setState(() {
-      _addressControllerInitialized = false;
-    });
-  }
-
-  void _setExternalAddress(String value) {
-    repo.setExternalAddress(conversationId, value);
+    repo.addMessages(parsed);
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final convo = _conversation;
-    final activeSession = _activeSession;
     final messages = repo.getMessages(conversationId);
-
-    if (!_addressControllerInitialized) {
-      _addressController.text = convo.externalAddress ?? '';
-      _addressControllerInitialized = true;
-    }
-
-    final String expirationText = activeSession == null
-        ? ''
-        : activeSession.expiresAt == null
-            ? 'Enabled (no expiration)'
-            : 'Expires at ${DateTime.fromMillisecondsSinceEpoch(activeSession.expiresAt!).toLocal()}';
 
     return Scaffold(
       appBar: AppBar(
@@ -124,7 +101,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
             ListTile(
@@ -135,7 +112,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              subtitle: Text(convo.lastMessagePreview),
+            ),
+
+            const SizedBox(height: 16),
+
+            ElevatedButton.icon(
+              onPressed: _simulateImport,
+              icon: const Icon(Icons.file_download),
+              label: const Text('Simulate Import'),
             ),
 
             const SizedBox(height: 16),
@@ -165,46 +149,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                   );
                 },
               ),
-
-            const Divider(height: 32),
-
-            const Text(
-              'Assigned Voice',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-
-            for (final v in VoicePresets.all)
-              RadioListTile<String>(
-                title: Text(v.displayName),
-                value: v.id,
-                groupValue: convo.assignedVoiceId,
-                onChanged: (value) {
-                  if (value != null) _setVoice(value);
-                },
-              ),
-
-            const Divider(height: 32),
-
-            const Text(
-              'Auto-Read Settings',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-
-            if (activeSession != null) ...[
-              ListTile(
-                title: const Text('Auto-Read Status'),
-                subtitle: Text(expirationText),
-              ),
-              TextButton(
-                onPressed: _disableAutoRead,
-                child: const Text('Disable Auto-Read'),
-              ),
-            ] else ...[
-              ElevatedButton(
-                onPressed: _enableAutoReadIndefinite,
-                child: const Text('Enable Auto-Read'),
-              ),
-            ],
           ],
         ),
       ),

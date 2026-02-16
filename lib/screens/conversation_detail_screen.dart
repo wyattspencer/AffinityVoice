@@ -56,8 +56,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     await ServiceLocator.ttsService.speak(
       text: message.body,
       voicePresetId: convo.assignedVoiceId,
-      rate: 0.5,
-      pitch: 1.0,
+      rate: repo.appSettings.ttsRate,
+      pitch: repo.appSettings.ttsPitch,
     );
   }
 
